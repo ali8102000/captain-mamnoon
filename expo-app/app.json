@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "ممنون",
-    "slug": "kfw",
+    "name": "كابتن ممنون",
+    "slug": "captain-mamnoon",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/mamnoon-logo.png",
-    "scheme": "mamnoon",
+    "scheme": "captain-mamnoon",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.mamnoon.app",
+      "bundleIdentifier": "com.mamnoon.captain",
       "config": {},
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "نحتاج موقعك لعرض الخدمات القريبة وتتبع الرحلات",
@@ -31,7 +31,7 @@
         "foregroundImage": "./assets/mamnoon-logo.png",
         "backgroundColor": "#f7f8f5"
       },
-      "package": "com.mamnoon.app",
+      "package": "com.mamnoon.captain",
       "config": {},
       "permissions": [
         "ACCESS_FINE_LOCATION",
@@ -58,8 +58,9 @@
       ]
     ],
     "extra": {
+      "appVariant": "driver",
       "eas": {
-        "projectId": "a6c763c4-3a5c-4725-b370-81967e3c0aab"
+        "projectId": "11b798cd-87b9-473f-b39c-eb22f069e212"
       }
     },
     "runtimeVersion": {
