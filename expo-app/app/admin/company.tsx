@@ -18,7 +18,6 @@ export default function CompanySettingsScreen() {
   const [logoAsset, setLogoAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [welcomeVisualUrl, setWelcomeVisualUrl] = useState<string | null>(null);
   const [welcomeVisualTargets, setWelcomeVisualTargets] = useState<string[]>(["customer","worker","driver","large_driver"]);
-  const [welcomeVisualTargets, setWelcomeVisualTargets] = useState<string[]>(["customer","worker","driver","large_driver"]);
   const [welcomeVisualAsset, setWelcomeVisualAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [welcomeVisualAnimated, setWelcomeVisualAnimated] = useState(false);
   const [welcomeVisualSizePx, setWelcomeVisualSizePx] = useState(180);
@@ -53,7 +52,6 @@ export default function CompanySettingsScreen() {
         setLogoUrl(data?.company_logo_url || branding.logoUrl);
         setWelcome(data?.welcome_message || branding.welcomeMessage);
         setWelcomeVisualUrl(data?.company_welcome_visual_url || branding.welcomeVisualUrl);
-        setWelcomeVisualTargets(Array.isArray(data?.company_welcome_visual_targets) && data.company_welcome_visual_targets.length ? data.company_welcome_visual_targets : ["customer","worker","driver","large_driver"]);
         setWelcomeVisualTargets(Array.isArray(data?.company_welcome_visual_targets) && data.company_welcome_visual_targets.length ? data.company_welcome_visual_targets : ["customer","worker","driver","large_driver"]);
         setWelcomeVisualAnimated(data?.company_welcome_visual_animated === true);
         setWelcomeVisualSizePx(Number.isInteger(data?.company_welcome_visual_size_px) ? Math.max(80, Math.min(320, data.company_welcome_visual_size_px)) : 180);
