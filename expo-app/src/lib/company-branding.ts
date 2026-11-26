@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { APP_VARIANT } from "@/lib/app-variant";
+import { APP_VARIANT } from "@/lib/app-variant";
 
 export type CompanyBranding = {
   companyName: string;
