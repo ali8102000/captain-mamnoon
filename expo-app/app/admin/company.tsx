@@ -18,6 +18,7 @@ export default function CompanySettingsScreen() {
   const [logoAsset, setLogoAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [welcomeVisualUrl, setWelcomeVisualUrl] = useState<string | null>(null);
   const [welcomeVisualTargets, setWelcomeVisualTargets] = useState<string[]>(["customer","worker","driver","large_driver"]);
+  const [welcomeVisualTargets, setWelcomeVisualTargets] = useState<string[]>(["customer","worker","driver","large_driver"]);
   const [welcomeVisualAsset, setWelcomeVisualAsset] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [welcomeVisualAnimated, setWelcomeVisualAnimated] = useState(false);
   const [welcomeVisualSizePx, setWelcomeVisualSizePx] = useState(180);
@@ -52,6 +53,7 @@ export default function CompanySettingsScreen() {
         setLogoUrl(data?.company_logo_url || branding.logoUrl);
         setWelcome(data?.welcome_message || branding.welcomeMessage);
         setWelcomeVisualUrl(data?.company_welcome_visual_url || branding.welcomeVisualUrl);
+        setWelcomeVisualTargets(Array.isArray(data?.company_welcome_visual_targets) && data.company_welcome_visual_targets.length ? data.company_welcome_visual_targets : ["customer","worker","driver","large_driver"]);
         setWelcomeVisualTargets(Array.isArray(data?.company_welcome_visual_targets) && data.company_welcome_visual_targets.length ? data.company_welcome_visual_targets : ["customer","worker","driver","large_driver"]);
         setWelcomeVisualAnimated(data?.company_welcome_visual_animated === true);
         setWelcomeVisualSizePx(Number.isInteger(data?.company_welcome_visual_size_px) ? Math.max(80, Math.min(320, data.company_welcome_visual_size_px)) : 180);
@@ -179,6 +181,9 @@ export default function CompanySettingsScreen() {
         <TouchableOpacity onPress={()=>void chooseLogo()} style={s.pickButton}><Text style={s.pickText}>{logoAsset ? "اختيار صورة أخرى" : logoUrl ? "تغيير صورة الشعار" : "اختيار صورة الشعار"}</Text></TouchableOpacity>
         {!!logoAsset && <Text style={s.muted}>الصورة الجديدة محددة وجاهزة للحفظ.</Text>}
         <Text style={s.label}>صورة شاشة بداية التطبيق (تقبل GIF متحرك)</Text>
+        <Text style={s.label}>الفئات التي تظهر لها صورة الافتتاحية</Text>
+        <Text style={s.muted}>حدد فئة واحدة أو أكثر. الصورة تظهر فقط عند فتح التطبيق ولا تتغير أي شاشة بعد الدخول.</Text>
+        {([{value:"customer",label:"تطبيق الزبائن"},{value:"worker",label:"تطبيق الفني"},{value:"driver",label:"تطبيق التكسي"},{value:"large_driver",label:"تطبيق الناقل"}] as const).map(option=><TouchableOpacity key={option.value} onPress={()=>setWelcomeVisualTargets(current=>current.includes(option.value)?current.filter(value=>value!==option.value):[...current,option.value])} style={s.animationToggle}><View style={[s.toggleDot,welcomeVisualTargets.includes(option.value)&&s.toggleDotOn]}/><Text style={s.pickText}>{option.label}</Text></TouchableOpacity>)}
         <Text style={s.label}>الفئات التي تظهر لها صورة الافتتاحية</Text>
         <Text style={s.muted}>حدد فئة واحدة أو أكثر. الصورة تظهر فقط عند فتح التطبيق ولا تتغير أي شاشة بعد الدخول.</Text>
         {([{value:"customer",label:"تطبيق الزبائن"},{value:"worker",label:"تطبيق الفني"},{value:"driver",label:"تطبيق التكسي"},{value:"large_driver",label:"تطبيق الناقل"}] as const).map(option=><TouchableOpacity key={option.value} onPress={()=>setWelcomeVisualTargets(current=>current.includes(option.value)?current.filter(value=>value!==option.value):[...current,option.value])} style={s.animationToggle}><View style={[s.toggleDot,welcomeVisualTargets.includes(option.value)&&s.toggleDotOn]}/><Text style={s.pickText}>{option.label}</Text></TouchableOpacity>)}
