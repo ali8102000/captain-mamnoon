@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { APP_VARIANT } from "@/lib/app-variant";
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Image,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Image, Modal,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { supabase } from "@/lib/supabase";
@@ -51,6 +51,7 @@ export default function DriverOnboarding() {
   const [vehicleVideoPath, setVehicleVideoPath] = useState<string | null>(null);
   const [vehicleVideoMaxDurationSeconds, setVehicleVideoMaxDurationSeconds] = useState(10);
   const [changedDocuments, setChangedDocuments] = useState<Record<string, boolean>>({});
+  const [photoToConfirm, setPhotoToConfirm] = useState<{ kind: "face" | "id" | "id-back" | "vehicle-document"; image: PickedImage; title: string } | null>(null);
   const [originalVehicle, setOriginalVehicle] = useState<Record<string, unknown>>({ make: "", model: "", year: "", plate: "", color: "", category: largeDriverMode ? "large" : "economy", vehicleType: null });
   const [status, setStatus] = useState<string | null>(null);
   const [savedModelName, setSavedModelName] = useState<string | null>(null);
@@ -230,19 +231,21 @@ export default function DriverOnboarding() {
         const photoTitle = kind === "face" ? "الصورة الشخصية"
           : kind === "id" ? "البطاقة الوطنية الأمامية"
           : kind === "id-back" ? "البطاقة الوطنية الخلفية" : "مستند السيارة";
-        Alert.alert("تأكيد الصورة", `تم اختيار ${photoTitle}. هل تريد اعتمادها؟`, [
-          { text: "إعادة الاختيار", style: "cancel" },
-          { text: "اعتماد الصورة", onPress: () => {
-            if (kind === "face") { setFacePhoto(picked); setChangedDocuments((current) => ({ ...current, face_photo: true })); }
-            else if (kind === "id") { setIdPhoto(picked); setChangedDocuments((current) => ({ ...current, id_card: true })); }
-            else if (kind === "id-back") { setIdBackPhoto(picked); setChangedDocuments((current) => ({ ...current, id_card_back: true })); }
-            else { setVehicleDocumentPhoto(picked); setChangedDocuments((current) => ({ ...current, vehicle_document: true })); }
-          } },
-        ]);
+        setPhotoToConfirm({ kind, image: picked, title: photoTitle });
       }
     } catch {
       Alert.alert("خطأ", "تعذر اختيار الصورة. حاول مرة أخرى.");
     }
+  }
+
+  function confirmPickedPhoto() {
+    if (!photoToConfirm) return;
+    const { kind, image } = photoToConfirm;
+    if (kind === "face") { setFacePhoto(image); setChangedDocuments((current) => ({ ...current, face_photo: true })); }
+    else if (kind === "id") { setIdPhoto(image); setChangedDocuments((current) => ({ ...current, id_card: true })); }
+    else if (kind === "id-back") { setIdBackPhoto(image); setChangedDocuments((current) => ({ ...current, id_card_back: true })); }
+    else { setVehicleDocumentPhoto(image); setChangedDocuments((current) => ({ ...current, vehicle_document: true })); }
+    setPhotoToConfirm(null);
   }
 
   async function pickVehicleVideo(source: "camera" | "library") {
@@ -307,6 +310,10 @@ export default function DriverOnboarding() {
   async function submit() {
     if (!user) {
       Alert.alert("خطأ", "انتهت جلسة الدخول. سجّل الدخول مرة أخرى.");
+      return;
+    }
+    if (APP_VARIANT !== "driver") {
+      Alert.alert("نسخة غير صحيحة", "هذا المسار مخصص لتطبيق كابتن ممنون فقط.");
       return;
     }
     if (vehicleChangeMode) {
@@ -434,19 +441,56 @@ export default function DriverOnboarding() {
         .update({ full_name: legalName.trim() }).eq("id", user.id);
       if (profileError) throw new Error(`تعذر تحديث الاسم: ${profileError.message}`);
 
-      const { error: driverError } = await supabase.from("driver_profiles").upsert({
+      // Avoid upsert(status="pending") on an existing row: the database trigger
+      // intentionally rejects status changes except rejected -> pending.
+      const { data: existingDriver, error: existingDriverError } = await supabase
+        .from("driver_profiles")
+        .select("status,vehicle_category,vehicle_type")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (existingDriverError) throw new Error(`تعذر التحقق من ملف السائق: ${existingDriverError.message}`);
+
+      const existingIsLarge = existingDriver?.vehicle_category === "large"
+        || ["kia_cargo", "kia_passenger", "bus"].includes(String(existingDriver?.vehicle_type ?? ""));
+      if (existingIsLarge) {
+        throw new Error("هذا الحساب مرتبط بملف سائق النقل (المركبات الكبيرة). لا يمكن تحويل الملف نفسه إلى كابتن تكسي. استخدم حساب الكابتن المستقل.");
+      }
+      if (existingDriver?.status === "approved") {
+        setStatus("approved");
+        return;
+      }
+
+      const driverPayload = {
         user_id: user.id,
-        vehicle_make: category === "large" ? "Kia" : selectedMake,
+        vehicle_make: selectedMake,
         vehicle_model: resolvedModel.model,
         vehicle_year: vehicleYear,
         vehicle_category: category as any,
-        vehicle_type: category === "large" ? vehicleType : null,
+        vehicle_type: null,
         vehicle_plate: plate.trim(),
         vehicle_color: color.trim() || null,
         available: false,
-        status: "pending",
-      }, { onConflict: "user_id" });
-      if (driverError) throw new Error(`تعذر إنشاء ملف السائق: ${driverError.message}`);
+      };
+      let driverWriteError: any = null;
+      if (!existingDriver) {
+        const { error } = await supabase.from("driver_profiles").insert({ ...driverPayload, status: "pending" });
+        driverWriteError = error;
+      } else if (existingDriver.status === "rejected") {
+        const { error } = await supabase.from("driver_profiles")
+          .update({ ...driverPayload, status: "pending" })
+          .eq("user_id", user.id)
+          .eq("status", "rejected");
+        driverWriteError = error;
+      } else if (existingDriver.status === "pending") {
+        const { error } = await supabase.from("driver_profiles")
+          .update(driverPayload)
+          .eq("user_id", user.id)
+          .eq("status", "pending");
+        driverWriteError = error;
+      } else {
+        throw new Error("حالة ملف السائق الحالية لا تسمح بإعادة التسجيل. تواصل مع إدارة ممنون لمراجعة الحساب.");
+      }
+      if (driverWriteError) throw new Error(`تعذر إنشاء ملف السائق: ${driverWriteError.message}`);
 
       const [facePath, idPath, idBackPath, vehicleDocumentPath] = await Promise.all([
         uploadImage(facePhoto, "face"),
@@ -522,21 +566,27 @@ export default function DriverOnboarding() {
           <>
           {pendingVehicleChange && <Text style={styles.note}>طلب تحديث بيانات المركبة أو مستنداتها بانتظار موافقة الإدارة. بياناتك الحالية تبقى فعالة.</Text>}
           {!pendingVehicleChange && <Button title="تحديث بيانات المركبة أو مستنداتها" onPress={() => { setVehicleChangeMode(true); setStatus(null); }} />}
-          <Button title="تفعيل دور السائق والمتابعة" onPress={async () => {
-            if (!user) return;
-            setBusy(true);
-            try {
-              const { error } = await supabase.rpc("grant_provider_role_safe", { _role: providerRole });
-              if (error) throw error;
-              await refresh();
-              await setActiveRole(providerRole);
-              safeNavigate("/home", "replace");
-            } catch (error) {
-              Alert.alert("تعذر تفعيل دور السائق", error instanceof Error ? error.message : "تأكد من اعتماد طلبك ثم حاول مجدداً.");
-            } finally {
-              setBusy(false);
-            }
-          }} loading={busy} />
+          <TouchableOpacity
+            style={[styles.approvedActionButton, busy && styles.approvedActionButtonDisabled]}
+            disabled={busy}
+            activeOpacity={0.85}
+            onPress={async () => {
+              if (!user) return;
+              setBusy(true);
+              try {
+                const { error } = await supabase.rpc("grant_provider_role_safe", { _role: providerRole });
+                if (error) throw error;
+                await refresh();
+                await setActiveRole(providerRole);
+                safeNavigate("/home", "replace");
+              } catch (error) {
+                Alert.alert("تعذر تفعيل واجهة الكابتن", error instanceof Error ? error.message : "تأكد من اعتماد طلبك ثم حاول مجدداً.");
+              } finally {
+                setBusy(false);
+              }
+            }}>
+            <Text style={styles.approvedActionText}>{busy ? "جارٍ التفعيل..." : "✓ تفعيل واجهة الكابتن والانتقال للرئيسية"}</Text>
+          </TouchableOpacity>
           </>
         ) : (
           <View style={{ gap: 10 }}>
@@ -685,6 +735,21 @@ export default function DriverOnboarding() {
       <View style={{ height: 24 }} />
       <Button title={vehicleChangeMode ? "إرسال طلب التحديث للإدارة" : "إرسال طلب التسجيل للمراجعة"} onPress={submit} loading={busy} />
     </ScrollView>
+    <Modal visible={!!photoToConfirm} transparent animationType="fade" onRequestClose={() => setPhotoToConfirm(null)}>
+      <View style={styles.photoConfirmOverlay}>
+        <View style={styles.photoConfirmCard}>
+          <Text style={styles.photoConfirmTitle}>تأكيد الصورة</Text>
+          <Text style={styles.photoConfirmText}>{photoToConfirm ? `تم اختيار ${photoToConfirm.title}. هل تريد اعتمادها؟` : ""}</Text>
+          {photoToConfirm && <Image source={{ uri: photoToConfirm.image.uri }} style={styles.photoConfirmPreview} />}
+          <TouchableOpacity style={styles.photoConfirmAccept} onPress={confirmPickedPhoto} activeOpacity={0.85}>
+            <Text style={styles.photoConfirmAcceptText}>✓ اعتماد الصورة</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.photoConfirmCancel} onPress={() => setPhotoToConfirm(null)} activeOpacity={0.85}>
+            <Text style={styles.photoConfirmCancelText}>إعادة الاختيار</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -706,4 +771,16 @@ const styles = StyleSheet.create({
   photoButton: { minHeight: 112, borderWidth: 1, borderStyle: "dashed", borderColor: palette.gold, borderRadius: radius.lg, backgroundColor: palette.surface, alignItems: "center", justifyContent: "center", padding: 12 },
   photoText: { color: palette.brand, fontWeight: "900", textAlign: "center" },
   preview: { width: 150, height: 110, borderRadius: radius.md, resizeMode: "cover" },
+  approvedActionButton: { minHeight: 58, paddingHorizontal: 18, paddingVertical: 15, borderRadius: radius.lg, borderWidth: 2, borderColor: "#15803D", backgroundColor: "#16A34A", alignItems: "center", justifyContent: "center", shadowColor: "#166534", shadowOpacity: 0.18, shadowRadius: 6, elevation: 3 },
+  approvedActionButtonDisabled: { opacity: 0.65 },
+  approvedActionText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900", textAlign: "center" },
+  photoConfirmOverlay: { flex: 1, backgroundColor: "rgba(15, 23, 42, 0.55)", alignItems: "center", justifyContent: "center", padding: 24 },
+  photoConfirmCard: { width: "100%", maxWidth: 380, backgroundColor: "#FFFFFF", borderRadius: 20, borderWidth: 2, borderColor: "#16A34A", padding: 20, gap: 12, alignItems: "center" },
+  photoConfirmTitle: { color: "#14532D", fontSize: 20, fontWeight: "900" },
+  photoConfirmText: { color: "#334155", fontSize: 14, lineHeight: 23, textAlign: "center" },
+  photoConfirmPreview: { width: 190, height: 135, borderRadius: 12, resizeMode: "cover" },
+  photoConfirmAccept: { width: "100%", minHeight: 52, borderRadius: 12, borderWidth: 2, borderColor: "#15803D", backgroundColor: "#16A34A", alignItems: "center", justifyContent: "center" },
+  photoConfirmAcceptText: { color: "#FFFFFF", fontSize: 16, fontWeight: "900" },
+  photoConfirmCancel: { width: "100%", minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: "#CBD5E1", backgroundColor: "#F8FAFC", alignItems: "center", justifyContent: "center" },
+  photoConfirmCancelText: { color: "#475569", fontSize: 14, fontWeight: "800" },
 });
