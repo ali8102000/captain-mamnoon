@@ -598,6 +598,7 @@ export default function DriverOnboarding() {
   }
 
   return (
+    <>
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 48 }}>
       <Text style={styles.title}>{vehicleChangeMode ? "تحديث بيانات المركبة أو مستنداتها" : largeDriverMode ? "تسجيل سائق السيارات الكبيرة" : "تسجيل كابتن التكسي"}</Text>
       <Text style={styles.note}>{vehicleChangeMode ? "غيّر بيانات المركبة أو اختر مستنداً واحداً أو أكثر لاستبداله. المستندات التي لا تغيّرها تبقى كما هي، والتحديث لا يتفعّل إلا بعد موافقة الإدارة." : largeDriverMode ? "قسم مستقل لكيا الحمل وكيا الركاب والباص. أكمل بيانات المركبة والهوية." : "أكمل بيانات سيارة التكسي والهوية. حسابك يبقى معلّقاً لحين موافقة الإدارة."}</Text>
@@ -750,6 +751,7 @@ export default function DriverOnboarding() {
         </View>
       </View>
     </Modal>
+    </>
   );
 }
 
