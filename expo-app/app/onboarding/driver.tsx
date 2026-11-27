@@ -113,7 +113,7 @@ export default function DriverOnboarding() {
         supabase.from("provider_verifications")
           .select("status,rejection_reason,metadata")
           .eq("user_id", user.id).eq("provider_type", providerRole).maybeSingle(),
-        supabase.from("driver_profiles")
+        (supabase as any).from(largeDriverMode ? "naqil_profiles" : "driver_profiles")
           .select("status,vehicle_make,vehicle_model,vehicle_year,vehicle_plate,vehicle_color,vehicle_category,vehicle_type")
           .eq("user_id", user.id).maybeSingle(),
         supabase.from("user_roles").select("role")
@@ -443,23 +443,23 @@ export default function DriverOnboarding() {
 
       // Avoid upsert(status="pending") on an existing row: the database trigger
       // intentionally rejects status changes except rejected -> pending.
-      const [{ data: existingDriver, error: existingDriverError }, { data: existingLargeRole, error: existingLargeRoleError }] = await Promise.all([
-        supabase.from("driver_profiles")
-          .select("status,vehicle_category,vehicle_type,vehicle_model")
-          .eq("user_id", user.id)
-          .maybeSingle(),
-        supabase.from("user_roles").select("role")
-          .eq("user_id", user.id).eq("role", "large_driver").maybeSingle(),
-      ]);
-      if (existingDriverError) throw new Error(`تعذر التحقق من ملف السائق: ${existingDriverError.message}`);
-      if (existingLargeRoleError) throw new Error(`تعذر التحقق من نوع الحساب: ${existingLargeRoleError.message}`);
+      const { data: existingDriver, error: existingDriverError } = await supabase.from("driver_profiles")
+        .select("status,vehicle_category,vehicle_type,vehicle_model")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (existingDriverError) throw new Error(`تعذر التحقق من ملف سائق التكسي: ${existingDriverError.message}`);
 
-      const existingIsLarge = !!existingLargeRole
-        || existingDriver?.vehicle_category === "large"
+      // Taxi and large-vehicle accounts are separate roles with separate profile
+      // tables (driver_profiles vs naqil_profiles). Having the large_driver role
+      // must not block this user from creating an independent taxi profile.
+      // Only protect an actual legacy large-vehicle row in driver_profiles from
+      // being overwritten as a taxi profile.
+      const existingIsLegacyLargeProfile =
+        existingDriver?.vehicle_category === "large"
         || ["kia_cargo", "kia_passenger", "bus"].includes(String(existingDriver?.vehicle_type ?? ""))
         || ["كيا حمل", "كيا ركاب", "باص"].includes(String(existingDriver?.vehicle_model ?? "").trim());
-      if (existingIsLarge) {
-        throw new Error("هذا الحساب مرتبط بملف سائق النقل (المركبات الكبيرة). لا يمكن تحويل الملف نفسه إلى كابتن تكسي. استخدم حساب الكابتن المستقل.");
+      if (existingIsLegacyLargeProfile) {
+        throw new Error("يوجد ملف مركبة كبيرة قديم داخل ملف التكسي. لم نغيّر بياناته؛ تواصل مع الإدارة لفصل الملف القديم قبل التسجيل.");
       }
       if (existingDriver?.status === "approved") {
         setStatus("approved");
