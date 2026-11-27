@@ -443,15 +443,21 @@ export default function DriverOnboarding() {
 
       // Avoid upsert(status="pending") on an existing row: the database trigger
       // intentionally rejects status changes except rejected -> pending.
-      const { data: existingDriver, error: existingDriverError } = await supabase
-        .from("driver_profiles")
-        .select("status,vehicle_category,vehicle_type")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      const [{ data: existingDriver, error: existingDriverError }, { data: existingLargeRole, error: existingLargeRoleError }] = await Promise.all([
+        supabase.from("driver_profiles")
+          .select("status,vehicle_category,vehicle_type,vehicle_model")
+          .eq("user_id", user.id)
+          .maybeSingle(),
+        supabase.from("user_roles").select("role")
+          .eq("user_id", user.id).eq("role", "large_driver").maybeSingle(),
+      ]);
       if (existingDriverError) throw new Error(`تعذر التحقق من ملف السائق: ${existingDriverError.message}`);
+      if (existingLargeRoleError) throw new Error(`تعذر التحقق من نوع الحساب: ${existingLargeRoleError.message}`);
 
-      const existingIsLarge = existingDriver?.vehicle_category === "large"
-        || ["kia_cargo", "kia_passenger", "bus"].includes(String(existingDriver?.vehicle_type ?? ""));
+      const existingIsLarge = !!existingLargeRole
+        || existingDriver?.vehicle_category === "large"
+        || ["kia_cargo", "kia_passenger", "bus"].includes(String(existingDriver?.vehicle_type ?? ""))
+        || ["كيا حمل", "كيا ركاب", "باص"].includes(String(existingDriver?.vehicle_model ?? "").trim());
       if (existingIsLarge) {
         throw new Error("هذا الحساب مرتبط بملف سائق النقل (المركبات الكبيرة). لا يمكن تحويل الملف نفسه إلى كابتن تكسي. استخدم حساب الكابتن المستقل.");
       }
